@@ -1,0 +1,234 @@
+# ============================================
+# TeamPass Helm Chart Default Values
+# ============================================
+
+# ----------------------------------------
+# Image Configuration
+# ----------------------------------------
+image:
+  repository: teampass/teampass
+  tag: "sha256:6afa42c4071b2400f2d4995654776ff42dbccea96c2b87ebfcf4d29c7e672edf"
+  pullPolicy: IfNotPresent
+
+# Image pull secrets
+imagePullSecrets: []
+
+# Name overrides
+nameOverride: ""
+fullnameOverride: ""
+
+# ----------------------------------------
+# Service Account
+# ----------------------------------------
+serviceAccount:
+  create: true
+  annotations: {}
+  name: ""
+
+# ----------------------------------------
+# Pod Security Context
+# ----------------------------------------
+podSecurityContext: {}
+  # fsGroup: 2000
+
+# ----------------------------------------
+# Security Context
+# ----------------------------------------
+securityContext: {}
+  # capabilities:
+  #   drop:
+  #   - ALL
+  # readOnlyRootFilesystem: true
+  # runAsNonRoot: true
+  # runAsUser: 1000
+
+# ----------------------------------------
+# Service Configuration
+# ----------------------------------------
+service:
+  type: ClusterIP
+  port: 80
+  targetPort: 80
+  annotations: {}
+
+# ----------------------------------------
+# Ingress Configuration
+# ----------------------------------------
+ingress:
+  enabled: false
+  className: nginx
+  annotations: {}
+    # kubernetes.io/ingress.class: nginx
+    # kubernetes.io/tls-acme: "true"
+  hosts:
+    - host: teampass.local
+      paths:
+        - path: /
+          pathType: Prefix
+  tls: []
+  #  - secretName: teampass-tls
+  #    hosts:
+  #      - teampass.local
+
+# ----------------------------------------
+# Resources
+# ----------------------------------------
+resources:
+  requests:
+    memory: "256Mi"
+    cpu: "100m"
+  limits:
+    memory: "512M"
+    cpu: "500m"
+
+# ----------------------------------------
+# Autoscaling
+# ----------------------------------------
+autoscaling:
+  enabled: false
+  minReplicas: 1
+  maxReplicas: 5
+  targetCPUUtilizationPercentage: 80
+  targetMemoryUtilizationPercentage: 80
+
+# ----------------------------------------
+# Node Selector
+# ----------------------------------------
+nodeSelector: {}
+
+# ----------------------------------------
+# Tolerations
+# ----------------------------------------
+tolerations: []
+
+# ----------------------------------------
+# Affinity
+# ----------------------------------------
+affinity: {}
+
+# ----------------------------------------
+# Pod Disruption Budget
+# ----------------------------------------
+pdb:
+  enabled: false
+  minAvailable: 1
+  # maxUnavailable: 1
+
+# ----------------------------------------
+# Database Configuration (external)
+# ----------------------------------------
+externalDatabase:
+  enabled: false
+  host: ""
+  port: 3306
+  database: teampass
+  user: teampass
+  password: ""
+  prefix: teampass_
+
+# ----------------------------------------
+# MariaDB Sub-chart Configuration
+# ----------------------------------------
+mariadb:
+  enabled: true
+  architecture: standalone
+  auth:
+    database: teampass
+    username: teampass
+    password: ""  # Auto-generated if empty
+    rootPassword: ""  # Auto-generated if empty
+  primary:
+    persistence:
+      enabled: true
+      storageClass: ""
+      size: 10Gi
+    resources:
+      requests:
+        memory: "256Mi"
+        cpu: "100m"
+      limits:
+        memory: "512Mi"
+        cpu: "500m"
+    configuration: |
+      [mysqld]
+      character-set-server=utf8mb4
+      collation-server=utf8mb4_unicode_ci
+      max_allowed_packet=64M
+      innodb_buffer_pool_size=256M
+
+# ----------------------------------------
+# TeamPass Application Configuration
+# ----------------------------------------
+teampass:
+  # Installation mode: manual | auto
+  installMode: manual
+  
+  # Admin credentials (for auto installation)
+  adminEmail: admin@teampass.local
+  adminPassword: ""
+  
+  # Application URL
+  url: http://localhost
+  
+  # PHP Configuration
+  php:
+    memoryLimit: 512M
+    uploadMaxFilesize: 100M
+    maxExecutionTime: 120
+  
+  # Database prefix
+  dbPrefix: teampass_
+
+# ----------------------------------------
+# Environment Variables
+# ----------------------------------------
+env: []
+  # - name: CUSTOM_VAR
+  #   value: "custom-value"
+
+# ----------------------------------------
+# Persistent Volume Claims
+# ----------------------------------------
+persistence:
+  sk:
+    enabled: true
+    storageClass: ""
+    accessMode: ReadWriteOnce
+    size: 1Gi
+  files:
+    enabled: true
+    storageClass: ""
+    accessMode: ReadWriteOnce
+    size: 5Gi
+  upload:
+    enabled: true
+    storageClass: ""
+    accessMode: ReadWriteOnce
+    size: 5Gi
+
+# ----------------------------------------
+# Health Checks
+# ----------------------------------------
+healthCheck:
+  enabled: true
+  path: /health
+  initialDelaySeconds: 60
+  periodSeconds: 30
+  timeoutSeconds: 10
+  failureThreshold: 3
+  successThreshold: 1
+
+# ----------------------------------------
+# Network Policy
+# ----------------------------------------
+networkPolicy:
+  enabled: false
+  # ingressRules: []
+  # egressRules: []
+
+# ----------------------------------------
+# Secrets (auto-generated if empty)
+# ----------------------------------------
+secrets:
+  dbPassword: ""
+  mariadbRootPassword: ""

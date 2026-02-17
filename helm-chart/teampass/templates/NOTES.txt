@@ -1,0 +1,131 @@
+=====================================================
+  TeamPass Helm Chart Installation Complete!
+=====================================================
+
+Release Name: {{ .Release.Name }}
+Namespace: {{ .Release.Namespace }}
+Version: {{ .Chart.Version }}
+App Version: {{ .Chart.AppVersion }}
+
+=====================================================
+  Getting Started
+=====================================================
+
+1. Get the application URL:
+
+{{- if .Values.ingress.enabled }}
+{{- range $host := .Values.ingress.hosts }}
+  http{{ if $.Values.ingress.tls }}s{{ end }}://{{ $host.host }}{{ (index $host.paths 0).path }}
+{{- end }}
+
+{{- else if contains "NodePort" .Values.service.type }}
+
+  export NODE_PORT=$(kubectl get --namespace {{ .Release.Namespace }} -o jsonpath="{.spec.ports[0].nodePort}" services {{ include "teampass.fullname" . }})
+  export NODE_IP=$(kubectl get nodes --namespace {{ .Release.Namespace }} -o jsonpath="{.items[0].status.addresses[0].address}")
+  echo http://$NODE_IP:$NODE_PORT
+
+{{- else if contains "LoadBalancer" .Values.service.type }}
+
+  NOTE: It may take a few minutes for the LoadBalancer IP to be available.
+  Watch the status with: kubectl get --namespace {{ .Release.Namespace }} svc -w {{ include "teampass.fullname" . }}
+
+  export SERVICE_IP=$(kubectl get svc --namespace {{ .Release.Namespace }} {{ include "teampass.fullname" . }} --template "{{"{{ range (index .status.loadBalancer.ingress 0) }}{{.}}{{ end }}"}}")
+  echo http://$SERVICE_IP:{{ .Values.service.port }}
+
+{{- else if contains "ClusterIP" .Values.service.type }}
+
+  kubectl port-forward --namespace {{ .Release.Namespace }} svc/{{ include "teampass.fullname" . }} 8080:{{ .Values.service.port }}
+  echo "Visit http://127.0.0.1:8080 to access TeamPass"
+
+{{- end }}
+
+=====================================================
+  Database Configuration
+=====================================================
+
+{{- if .Values.mariadb.enabled }}
+MariaDB has been installed as part of this release.
+
+To get the database credentials:
+
+  export MARIADB_ROOT_PASSWORD=$(kubectl get secret --namespace {{ .Release.Namespace }} {{ .Release.Name }}-mariadb -o jsonpath="{.data.mariadb-root-password}" | base64 -d)
+  export MARIADB_PASSWORD=$(kubectl get secret --namespace {{ .Release.Namespace }} {{ .Release.Name }}-mariadb -o jsonpath="{.data.mariadb-password}" | base64 -d)
+
+Database Connection:
+  Host: {{ .Release.Name }}-mariadb
+  Port: 3306
+  Database: {{ .Values.mariadb.auth.database }}
+  User: {{ .Values.mariadb.auth.username }}
+
+{{- else if .Values.externalDatabase.enabled }}
+External database is configured:
+
+  Host: {{ .Values.externalDatabase.host }}
+  Port: {{ .Values.externalDatabase.port }}
+  Database: {{ .Values.externalDatabase.database }}
+  User: {{ .Values.externalDatabase.user }}
+
+{{- end }}
+
+=====================================================
+  Installation Mode
+=====================================================
+
+{{- if eq .Values.teampass.installMode "auto" }}
+Automated installation is enabled. The admin credentials have been created in a secret.
+
+To retrieve the admin password:
+
+  kubectl get secret --namespace {{ .Release.Namespace }} {{ include "teampass.fullname" . }}-admin -o jsonpath="{.data.admin-password}" | base64 -d
+
+Admin Email: {{ .Values.teampass.adminEmail }}
+
+{{- else }}
+Manual installation mode is enabled.
+
+Please visit the application URL and complete the installation wizard.
+
+{{- end }}
+
+=====================================================
+  Persistent Storage
+=====================================================
+
+The following Persistent Volume Claims have been created:
+
+{{- if .Values.persistence.sk.enabled }}
+  - {{ include "teampass.fullname" . }}-sk ({{ .Values.persistence.sk.size }})
+    Mount: /var/www/html/sk (Salt Keys)
+{{- end }}
+{{- if .Values.persistence.files.enabled }}
+  - {{ include "teampass.fullname" . }}-files ({{ .Values.persistence.files.size }})
+    Mount: /var/www/html/files
+{{- end }}
+{{- if .Values.persistence.upload.enabled }}
+  - {{ include "teampass.fullname" . }}-upload ({{ .Values.persistence.upload.size }})
+    Mount: /var/www/html/upload
+{{- end }}
+
+=====================================================
+  Health Checks
+=====================================================
+
+Health check endpoint: {{ .Values.healthCheck.path }}
+
+To check pod status:
+  kubectl get pods --namespace {{ .Release.Namespace }} -l "app.kubernetes.io/name={{ include "teampass.name" . }},app.kubernetes.io/instance={{ .Release.Name }}"
+
+To view logs:
+  kubectl logs --namespace {{ .Release.Namespace }} -l "app.kubernetes.io/name={{ include "teampass.name" . }},app.kubernetes.io/instance={{ .Release.Name }}"
+
+=====================================================
+  Security Notes
+=====================================================
+
+⚠️  IMPORTANT: Change default passwords in production!
+⚠️  Enable HTTPS/TLS for production deployments
+⚠️  Review NetworkPolicy settings for your environment
+⚠️  Regularly backup persistent volumes
+
+For more information, visit: https://teampass.net/
+=====================================================

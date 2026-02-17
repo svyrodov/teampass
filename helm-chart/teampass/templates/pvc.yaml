@@ -1,0 +1,53 @@
+{{- if .Values.persistence.sk.enabled }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "teampass.fullname" . }}-sk
+  labels:
+    {{- include "teampass.labels" . | nindent 4 }}
+spec:
+  accessModes:
+    - {{ .Values.persistence.sk.accessMode }}
+  {{- if .Values.persistence.sk.storageClass }}
+  storageClassName: {{ .Values.persistence.sk.storageClass }}
+  {{- end }}
+  resources:
+    requests:
+      storage: {{ .Values.persistence.sk.size }}
+{{- end }}
+---
+{{- if .Values.persistence.files.enabled }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "teampass.fullname" . }}-files
+  labels:
+    {{- include "teampass.labels" . | nindent 4 }}
+spec:
+  accessModes:
+    - {{ .Values.persistence.files.accessMode }}
+  {{- if .Values.persistence.files.storageClass }}
+  storageClassName: {{ .Values.persistence.files.storageClass }}
+  {{- end }}
+  resources:
+    requests:
+      storage: {{ .Values.persistence.files.size }}
+{{- end }}
+---
+{{- if .Values.persistence.upload.enabled }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "teampass.fullname" . }}-upload
+  labels:
+    {{- include "teampass.labels" . | nindent 4 }}
+spec:
+  accessModes:
+    - {{ .Values.persistence.upload.accessMode }}
+  {{- if .Values.persistence.upload.storageClass }}
+  storageClassName: {{ .Values.persistence.upload.storageClass }}
+  {{- end }}
+  resources:
+    requests:
+      storage: {{ .Values.persistence.upload.size }}
+{{- end }}

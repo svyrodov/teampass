@@ -1,0 +1,242 @@
+# ============================================
+# TeamPass Helm Chart - Production Values
+# ============================================
+# Production-ready configuration with high availability
+
+# ----------------------------------------
+# Replicas (requires autoscaling disabled)
+# ----------------------------------------
+replicaCount: 3
+
+# ----------------------------------------
+# Image Configuration
+# ----------------------------------------
+image:
+  repository: teampass/teampass
+  tag: "sha256:6afa42c4071b2400f2d4995654776ff42dbccea96c2b87ebfcf4d29c7e672edf"
+  pullPolicy: IfNotPresent
+
+imagePullSecrets:
+  - name: regcred
+
+# ----------------------------------------
+# Service Configuration
+# ----------------------------------------
+service:
+  type: ClusterIP
+  port: 80
+  annotations:
+    service.beta.kubernetes.io/aws-load-balancer-type: "nlb"
+
+# ----------------------------------------
+# Ingress Configuration
+# ----------------------------------------
+ingress:
+  enabled: true
+  className: nginx
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-body-size: "100m"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "120"
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+  hosts:
+    - host: teampass.example.com
+      paths:
+        - path: /
+          pathType: Prefix
+  tls:
+    - secretName: teampass-tls
+      hosts:
+        - teampass.example.com
+
+# ----------------------------------------
+# Resources (Production)
+# ----------------------------------------
+resources:
+  requests:
+    memory: "1Gi"
+    cpu: "500m"
+  limits:
+    memory: "2Gi"
+    cpu: "2000m"
+
+# ----------------------------------------
+# Autoscaling (Production)
+# ----------------------------------------
+autoscaling:
+  enabled: true
+  minReplicas: 3
+  maxReplicas: 20
+  targetCPUUtilizationPercentage: 70
+  targetMemoryUtilizationPercentage: 70
+
+# ----------------------------------------
+# TeamPass Application Configuration
+# ----------------------------------------
+teampass:
+  installMode: auto
+  adminEmail: admin@example.com
+  adminPassword: ""  # Set via secret
+  url: https://teampass.example.com
+  php:
+    memoryLimit: 1024M
+    uploadMaxFilesize: 200M
+    maxExecutionTime: 300
+  dbPrefix: teampass_
+
+# ----------------------------------------
+# MariaDB Configuration (Production)
+# ----------------------------------------
+mariadb:
+  enabled: true
+  architecture: replication
+  auth:
+    database: teampass
+    username: teampass
+    password: ""  # Auto-generated
+    rootPassword: ""  # Auto-generated
+  primary:
+    persistence:
+      enabled: true
+      storageClass: "gp3"
+      size: 100Gi
+    resources:
+      requests:
+        memory: "2Gi"
+        cpu: "1000m"
+      limits:
+        memory: "4Gi"
+        cpu: "4000m"
+    configuration: |
+      [mysqld]
+      character-set-server=utf8mb4
+      collation-server=utf8mb4_unicode_ci
+      max_allowed_packet=128M
+      innodb_buffer_pool_size=2G
+      innodb_log_file_size=512M
+      innodb_flush_log_at_trx_commit=1
+      sync_binlog=1
+  secondary:
+    replicaCount: 2
+    persistence:
+      enabled: true
+      storageClass: "gp3"
+      size: 100Gi
+    resources:
+      requests:
+        memory: "1Gi"
+        cpu: "500m"
+      limits:
+        memory: "2Gi"
+        cpu: "2000m"
+
+# ----------------------------------------
+# Persistent Storage (Production)
+# ----------------------------------------
+persistence:
+  sk:
+    enabled: true
+    storageClass: "gp3"
+    accessMode: ReadWriteOnce
+    size: 5Gi
+  files:
+    enabled: true
+    storageClass: "gp3"
+    accessMode: ReadWriteOnce
+    size: 50Gi
+  upload:
+    enabled: true
+    storageClass: "gp3"
+    accessMode: ReadWriteOnce
+    size: 50Gi
+
+# ----------------------------------------
+# Health Checks (Production)
+# ----------------------------------------
+healthCheck:
+  enabled: true
+  path: /health
+  initialDelaySeconds: 90
+  periodSeconds: 30
+  timeoutSeconds: 10
+  failureThreshold: 3
+  successThreshold: 1
+
+# ----------------------------------------
+# Network Policy (Production)
+# ----------------------------------------
+networkPolicy:
+  enabled: true
+  ingressRules:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              name: ingress-nginx
+  egressRules:
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: mariadb
+
+# ----------------------------------------
+# Pod Disruption Budget (Production)
+# ----------------------------------------
+pdb:
+  enabled: true
+  minAvailable: 2
+
+# ----------------------------------------
+# Node Selector (Production)
+# ----------------------------------------
+nodeSelector:
+  node-type: application
+
+# ----------------------------------------
+# Tolerations (Production)
+# ----------------------------------------
+tolerations:
+  - key: "dedicated"
+    operator: "Equal"
+    value: "application"
+    effect: "NoSchedule"
+
+# ----------------------------------------
+# Affinity (Production)
+# ----------------------------------------
+affinity:
+  podAntiAffinity:
+    preferredDuringSchedulingIgnoredDuringExecution:
+      - weight: 100
+        podAffinityTerm:
+          labelSelector:
+            matchExpressions:
+              - key: app.kubernetes.io/name
+                operator: In
+                values:
+                  - teampass
+          topologyKey: kubernetes.io/hostname
+
+# ----------------------------------------
+# Service Account (Production)
+# ----------------------------------------
+serviceAccount:
+  create: true
+  annotations:
+    eks.amazonaws.com/role-arn: arn:aws:iam::123456789012:role/teampass-role
+  automountServiceAccountToken: false
+
+# ----------------------------------------
+# Security Context (Production)
+# ----------------------------------------
+podSecurityContext:
+  fsGroup: 1000
+  runAsNonRoot: true
+
+securityContext:
+  allowPrivilegeEscalation: false
+  capabilities:
+    drop:
+      - ALL
+  readOnlyRootFilesystem: false
+  runAsUser: 1000
+  runAsGroup: 1000

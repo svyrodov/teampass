@@ -1,0 +1,28 @@
+apiVersion: v2
+name: teampass
+description: A Helm chart for deploying TeamPass collaborative password manager on Kubernetes
+type: application
+version: 1.0.0
+appVersion: "3.1.6.7"
+
+keywords:
+  - teampass
+  - password-manager
+  - security
+  - php
+  - collaboration
+
+maintainers:
+  - name: DevOps Team
+    email: devops@example.com
+
+sources:
+  - https://github.com/teampass/teampass
+
+home: https://teampass.net/
+
+dependencies:
+  - name: mariadb
+    version: "18.0.0"
+    repository: "https://charts.bitnami.com/bitnami"
+    condition: mariadb.enabled

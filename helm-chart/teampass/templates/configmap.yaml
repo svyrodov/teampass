@@ -1,0 +1,20 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "teampass.fullname" . }}-config
+  labels:
+    {{- include "teampass.labels" . | nindent 4 }}
+data:
+  DB_HOST: {{ include "teampass.databaseHost" . }}
+  DB_PORT: {{ include "teampass.databasePort" . | quote }}
+  DB_NAME: {{ include "teampass.databaseName" . }}
+  DB_USER: {{ include "teampass.databaseUser" . }}
+  DB_PREFIX: {{ .Values.teampass.dbPrefix | quote }}
+  INSTALL_MODE: {{ .Values.teampass.installMode | quote }}
+  TEAMPASS_URL: {{ .Values.teampass.url | quote }}
+  PHP_MEMORY_LIMIT: {{ .Values.teampass.php.memoryLimit | quote }}
+  PHP_UPLOAD_MAX_FILESIZE: {{ .Values.teampass.php.uploadMaxFilesize | quote }}
+  PHP_MAX_EXECUTION_TIME: {{ .Values.teampass.php.maxExecutionTime | quote }}
+{{- if eq .Values.teampass.installMode "auto" }}
+  ADMIN_EMAIL: {{ .Values.teampass.adminEmail | quote }}
+{{- end }}

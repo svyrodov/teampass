@@ -1,0 +1,18 @@
+{{- if .Values.pdb.enabled }}
+apiVersion: {{ include "teampass.pdb.apiVersion" . }}
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "teampass.fullname" . }}
+  labels:
+    {{- include "teampass.labels" . | nindent 4 }}
+spec:
+  {{- if .Values.pdb.minAvailable }}
+  minAvailable: {{ .Values.pdb.minAvailable }}
+  {{- end }}
+  {{- if .Values.pdb.maxUnavailable }}
+  maxUnavailable: {{ .Values.pdb.maxUnavailable }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "teampass.selectorLabels" . | nindent 6 }}
+{{- end }}
