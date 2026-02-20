@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-This directory contains a **Helm chart** for deploying **TeamPass** — a collaborative password manager for teams — on Kubernetes. The chart provides a complete, production-ready deployment configuration with support for high availability, security hardening, and multi-environment setups.
+This directory contains a **Helm chart** for deploying **TeamPass** — a collaborative password manager for teams — on Kubernetes. The chart provides a complete deployment configuration with support for high availability, security hardening, and multi-environment setups.
 
 ### Architecture
 
@@ -88,12 +88,6 @@ teampass/
 
 ### Installation Commands
 
-**Add Helm repository (if published):**
-```bash
-helm repo add teampass https://charts.example.com
-helm repo update
-```
-
 **Install with defaults (development):**
 ```bash
 helm install teampass ./teampass --namespace teampass --create-namespace
@@ -121,9 +115,6 @@ helm install teampass ./teampass \
   --set mariadb.enabled=false \
   --set externalDatabase.enabled=true \
   --set externalDatabase.host=mysql.example.com \
-  --set externalDatabase.port=3306 \
-  --set externalDatabase.database=teampass \
-  --set externalDatabase.user=teampass \
   --set externalDatabase.password=SecurePassword
 ```
 
@@ -199,6 +190,9 @@ echo "http://$SERVICE_IP"
 | `mariadb.auth.database` | Database name | `teampass` |
 | `mariadb.auth.username` | Database user | `teampass` |
 | `mariadb.primary.persistence.size` | DB storage size | `10Gi` |
+| `mariadb.primary.fips.openssl` | OpenSSL FIPS mode | `off` |
+| `mariadb.primary.livenessProbe.initialDelaySeconds` | Liveness probe delay | `600` |
+| `mariadb.primary.readinessProbe.initialDelaySeconds` | Readiness probe delay | `120` |
 
 **External Database:**
 | Parameter | Description | Default |
@@ -308,6 +302,49 @@ The `_helpers.tpl` file provides reusable template functions:
 
 ## Troubleshooting
 
+### MariaDB Liveness Probe Fails with "Access Denied"
+
+**Problem:** MariaDB liveness probe fails with `Access denied for user 'root'@'localhost'`.
+
+**Cause:** Bitnami MariaDB chart uses password files for health checks. When passwords are auto-generated, the probe may fail during initial startup.
+
+**Solution:** Increase `initialDelaySeconds` for liveness probe to allow MariaDB to fully initialize:
+
+```yaml
+mariadb:
+  primary:
+    livenessProbe:
+      initialDelaySeconds: 600  # 10 minutes for first startup
+    readinessProbe:
+      initialDelaySeconds: 120
+```
+
+### MariaDB Crashes with Exit Code 137
+
+**Problem:** MariaDB container crashes with exit code 137 (OOM or signal).
+
+**Cause:** OpenSSL FIPS mode can cause crashes in some Kubernetes environments (e.g., Yandex Cloud).
+
+**Solution:** Disable FIPS mode:
+
+```yaml
+mariadb:
+  primary:
+    fips:
+      openssl: "off"
+```
+
+### Init Container Waits Indefinitely for Database
+
+**Problem:** TeamPass init container `wait-for-db` waits indefinitely.
+
+**Cause:** MariaDB is still initializing or network policy blocks connections.
+
+**Solution:**
+1. Check MariaDB logs: `kubectl logs -n teampass teampass-mariadb-0`
+2. Verify MariaDB is listening: `kubectl exec -n teampass teampass-mariadb-0 -- ps aux | grep mariadbd`
+3. Check network policies: `kubectl get networkpolicy -n teampass`
+
 ### Pod Not Starting
 
 ```bash
@@ -321,19 +358,6 @@ kubectl describe pod -n teampass teampass-xxxxx
 kubectl logs -n teampass teampass-xxxxx
 ```
 
-### Database Connection Issues
-
-```bash
-# Check MariaDB pod
-kubectl get pods -n teampass -l app.kubernetes.io/name=mariadb
-
-# Check database secret
-kubectl get secret -n teampass teampass-mariadb -o jsonpath='{.data.mariadb-password}' | base64 -d
-
-# Verify environment variables
-kubectl exec -n teampass teampass-xxxxx -- env | grep DB_
-```
-
 ### PVC Issues
 
 ```bash
@@ -345,19 +369,6 @@ kubectl describe pvc -n teampass teampass-sk
 
 # Check storage class
 kubectl get storageclass
-```
-
-### Ingress Issues
-
-```bash
-# Check ingress controller
-kubectl get pods -n ingress-nginx
-
-# Check ingress resource
-kubectl get ingress -n teampass
-
-# Describe ingress
-kubectl describe ingress -n teampass teampass
 ```
 
 ## Testing

@@ -95,6 +95,7 @@ mariadb:
     username: teampass
     password: ""  # Auto-generated
     rootPassword: ""  # Auto-generated
+    usePasswordFiles: true
   primary:
     persistence:
       enabled: true
@@ -107,6 +108,21 @@ mariadb:
       limits:
         memory: "4Gi"
         cpu: "4000m"
+    # Fix for liveness/readiness probe "Access Denied" error
+    livenessProbe:
+      enabled: true
+      initialDelaySeconds: 120
+      periodSeconds: 10
+      timeoutSeconds: 5
+      failureThreshold: 6
+      successThreshold: 1
+    readinessProbe:
+      enabled: true
+      initialDelaySeconds: 30
+      periodSeconds: 10
+      timeoutSeconds: 5
+      failureThreshold: 6
+      successThreshold: 1
     configuration: |
       [mysqld]
       character-set-server=utf8mb4

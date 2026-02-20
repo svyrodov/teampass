@@ -132,6 +132,10 @@ externalDatabase:
 mariadb:
   enabled: true
   architecture: standalone
+  # Global FIPS setting - use 'relaxed' for compatibility with Yandex Cloud Kubernetes
+  # Allowed values: '', 'restricted', 'relaxed', 'off'
+  global:
+    defaultFips: "relaxed"
   auth:
     database: teampass
     username: teampass
@@ -149,6 +153,29 @@ mariadb:
       limits:
         memory: "512Mi"
         cpu: "500m"
+    # FIPS mode configuration - must match global.defaultFips
+    fips:
+      openssl: "relaxed"
+    # Increase probe delays to allow for full MariaDB initialization
+    # First startup can take 5+ minutes for database setup
+    livenessProbe:
+      enabled: true
+      initialDelaySeconds: 600
+      periodSeconds: 10
+      timeoutSeconds: 5
+      failureThreshold: 6
+      successThreshold: 1
+    readinessProbe:
+      enabled: true
+      initialDelaySeconds: 120
+      periodSeconds: 10
+      timeoutSeconds: 5
+      failureThreshold: 6
+      successThreshold: 1
+    # Increase startup wait options for slow initialization
+    startupWaitOptions:
+      retries: 600
+      waitTime: 2
     configuration: |
       [mysqld]
       character-set-server=utf8mb4
