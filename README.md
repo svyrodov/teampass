@@ -2,7 +2,7 @@
 
 [![TeamPass Version](https://img.shields.io/badge/teampass-3.1.6.7-blue)](https://teampass.net/)
 [![Docker Compose](https://img.shields.io/badge/docker--compose-v3.8-blue)](https://docs.docker.com/compose/)
-[![MariaDB](https://img.shields.io/badge/mariadb-11.2-blue)](https://mariadb.org/)
+[![MariaDB](https://img.shields.io/badge/mariadb-12.2.2-blue)](https://mariadb.org/)
 [![Helm](https://img.shields.io/badge/helm-v3-blue)](https://helm.sh/)
 
 Комплексное решение для развёртывания **TeamPass** — менеджера паролей для командной работы — с использованием Docker Compose и Helm Chart для Kubernetes.
@@ -64,7 +64,7 @@
 | Сервис | Образ | Назначение |
 |--------|-------|------------|
 | `teampass` | `teampass/teampass:3.1.6.7` | Основное приложение |
-| `db` | `mariadb:11.2` | Сервер базы данных |
+| `db` | `mariadb:12.2.2` | Сервер базы данных |
 
 ### Тома данных
 
