@@ -1,6 +1,6 @@
 # TeamPass Docker Deployment
 
-[![TeamPass Version](https://img.shields.io/badge/teampass-3.1.5.2-blue)](https://teampass.net/)
+[![TeamPass Version](https://img.shields.io/badge/teampass-3.1.6.7-blue)](https://teampass.net/)
 [![Docker Compose](https://img.shields.io/badge/docker--compose-v3.8-blue)](https://docs.docker.com/compose/)
 [![MariaDB](https://img.shields.io/badge/mariadb-11.2-blue)](https://mariadb.org/)
 [![Helm](https://img.shields.io/badge/helm-v3-blue)](https://helm.sh/)
@@ -63,7 +63,7 @@
 
 | Сервис | Образ | Назначение |
 |--------|-------|------------|
-| `teampass` | `teampass/teampass:3.1.5.2` | Основное приложение |
+| `teampass` | `teampass/teampass:3.1.6.7` | Основное приложение |
 | `db` | `mariadb:11.2` | Сервер базы данных |
 
 ### Тома данных
@@ -154,7 +154,7 @@ ADMIN_PWD=YourSecurePassword
 
 | Переменная | Описание | По умолчанию |
 |------------|----------|--------------|
-| `TEAMPASS_VERSION` | Версия TeamPass | `3.1.5.2` |
+| `TEAMPASS_VERSION` | Версия TeamPass | `3.1.6.7` |
 | `TEAMPASS_PORT` | Порт для доступа | `8080` |
 | `TEAMPASS_URL` | Публичный URL | `http://localhost` |
 | `DB_NAME` | Имя базы данных | `teampass` |
@@ -227,7 +227,7 @@ helm install teampass ./helm-chart/teampass \
 
 | Параметр | Описание | По умолчанию |
 |----------|----------|--------------|
-| `image.tag` | Версия TeamPass | `3.1.5.2` |
+| `image.tag` | Версия TeamPass | `3.1.6.7` |
 | `service.type` | Тип сервиса | `ClusterIP` |
 | `ingress.enabled` | Включить Ingress | `false` |
 | `mariadb.enabled` | Развернуть MariaDB | `true` |
