@@ -5,9 +5,13 @@
 # ----------------------------------------
 # Image Configuration
 # ----------------------------------------
+# По умолчанию используется кастомный образ с исправленным PHP-FPM user
+# Оригинал: teampass/teampass
+# Кастомный: teampass-custom (PHP-FPM работает от nginx, а не www-data)
+# См. docker/Dockerfile для деталей
 image:
-  repository: teampass/teampass
-  tag: "sha256:6afa42c4071b2400f2d4995654776ff42dbccea96c2b87ebfcf4d29c7e672edf"
+  repository: teampass-custom
+  tag: "3.1.6.7"
   pullPolicy: IfNotPresent
 
 # Image pull secrets
@@ -132,56 +136,88 @@ externalDatabase:
 mariadb:
   enabled: true
   architecture: standalone
-  # Global FIPS setting - use 'relaxed' for compatibility with Yandex Cloud Kubernetes
-  # Allowed values: '', 'restricted', 'relaxed', 'off'
-  global:
-    defaultFips: "relaxed"
   auth:
     database: teampass
     username: teampass
-    password: ""  # Auto-generated if empty
-    rootPassword: ""  # Auto-generated if empty
+    password: ""  # Auto-generated
+    rootPassword: ""  # Auto-generated
+    usePasswordFiles: false
   primary:
+    ## Replica Count: 1
+    replicaCount: 1
+    ## MariaDB Configuration
+    configuration: |-
+      [mysqld]
+      skip-name-resolve
+      explicit_defaults_for_timestamp
+      basedir=/opt/bitnami/mariadb
+      datadir=/bitnami/mariadb/data
+      plugin_dir=/opt/bitnami/mariadb/plugin
+      port=3306
+      socket=/opt/bitnami/mariadb/tmp/mysql.sock
+      tmpdir=/opt/bitnami/mariadb/tmp
+      max_allowed_packet=16M
+      bind-address=*
+      pid-file=/opt/bitnami/mariadb/tmp/mysqld.pid
+      log-error=/opt/bitnami/mariadb/logs/mysqld.log
+      character-set-server=UTF8
+      collation-server=utf8_general_ci
+      slow_query_log=0
+      long_query_time=10.0
+      # character-set-server=utf8mb4
+      # collation-server=utf8mb4_unicode_ci
+      # max_allowed_packet=64M
+      # innodb_buffer_pool_size=256M
+
+      [client]
+      port=3306
+      socket=/opt/bitnami/mariadb/tmp/mysql.sock
+      default-character-set=UTF8
+      plugin_dir=/opt/bitnami/mariadb/plugin
     persistence:
       enabled: true
       storageClass: ""
-      size: 10Gi
+      size: 20Gi
     resources:
       requests:
-        memory: "256Mi"
-        cpu: "100m"
-      limits:
         memory: "512Mi"
-        cpu: "500m"
-    # FIPS mode configuration - must match global.defaultFips
-    fips:
-      openssl: "relaxed"
-    # Increase probe delays to allow for full MariaDB initialization
-    # First startup can take 5+ minutes for database setup
-    livenessProbe:
+        cpu: "250m"
+      limits:
+        memory: "1Gi"
+        cpu: "1000m"
+    startupProbe:
       enabled: true
-      initialDelaySeconds: 600
+      initialDelaySeconds: 30
       periodSeconds: 10
       timeoutSeconds: 5
-      failureThreshold: 6
+      failureThreshold: 30
       successThreshold: 1
-    readinessProbe:
+    livenessProbe:
       enabled: true
       initialDelaySeconds: 120
       periodSeconds: 10
-      timeoutSeconds: 5
-      failureThreshold: 6
+      timeoutSeconds: 1
+      failureThreshold: 3
       successThreshold: 1
-    # Increase startup wait options for slow initialization
-    startupWaitOptions:
-      retries: 600
-      waitTime: 2
-    configuration: |
-      [mysqld]
-      character-set-server=utf8mb4
-      collation-server=utf8mb4_unicode_ci
-      max_allowed_packet=64M
-      innodb_buffer_pool_size=256M
+    readinessProbe:
+      enabled: true
+      initialDelaySeconds: 30
+      periodSeconds: 10
+      timeoutSeconds: 1
+      failureThreshold: 3
+      successThreshold: 1
+    service:
+      type: ClusterIP
+      ports:
+        mysql: 3306
+        metrics: 9104
+      clusterIP: ""
+    ## Pod Disruption Budget
+    pdb:
+      create: false
+    ## Network Policy (optional)
+    networkPolicy:
+      enabled: false
 
 # ----------------------------------------
 # TeamPass Application Configuration

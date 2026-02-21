@@ -4,6 +4,29 @@
 
 This directory contains a **Helm chart** for deploying **TeamPass** — a collaborative password manager for teams — on Kubernetes. The chart provides a complete deployment configuration with support for high availability, security hardening, and multi-environment setups.
 
+### Custom Docker Image
+
+**Important:** This chart uses a **custom Docker image** (`teampass-custom`) that fixes a critical permissions issue in the official TeamPass image:
+
+| Component | Official Image | Custom Image |
+|-----------|---------------|--------------|
+| PHP-FPM user | `www-data` | `nginx` ✅ |
+| PHP-FPM group | `www-data` | `nginx` ✅ |
+| Nginx worker | `nginx` | `nginx` |
+| Files owner | `nginx` | `nginx` |
+
+The custom image ensures PHP-FPM and Nginx run under the same user (`nginx`), preventing "path not writable" errors.
+
+**Build the custom image:**
+```bash
+cd teampass/docker
+./build.sh
+# Or manually:
+docker build -t teampass-custom:3.1.6.7 -f Dockerfile .
+```
+
+See `docker/README.md` for details.
+
 ### Architecture
 
 ```
@@ -14,15 +37,15 @@ This directory contains a **Helm chart** for deploying **TeamPass** — a collab
 │   Users      │───▶│  │     TeamPass Deployment     │   │
 │              │    │  │  ┌─────────┐ ┌─────────┐   │   │
 │  (Browser)   │    │  │  │  Pod 1  │ │  Pod 2  │   │   │
-└──────────────┘    │  │  │  :80    │ │  :80    │   │   │
-                    │  │  └────┬────┘ └────┬────┘   │   │
-                    │  │       │           │        │   │
-                    │  │       └─────┬─────┘        │   │
-                    │  │             ▼              │   │
-                    │  │  ┌─────────────────────┐  │   │
-                    │  │  │     Service:80      │  │   │
-                    │  │  └──────────┬──────────┘  │   │
-                    │  │             │             │   │
+│  (HTTPS)     │    │  │  │  :80    │ │  :80    │   │   │
+└──────────────┘    │  │  └────┬────┘ └────┬────┘   │   │
+        │           │  │       │           │        │   │
+        ▼           │  │       └─────┬─────┘        │   │
+┌──────────────┐    │  │             ▼              │   │
+│   Ingress    │    │  │  ┌─────────────────────┐  │   │
+│   (nginx)    │───▶│  │  │     Service:80      │  │   │
+│   TLS Termination│  │  └──────────┬──────────┘  │   │
+└──────────────┘    │  │             │             │   │
                     │  │    ┌────────┴────────┐   │   │
                     │  │    ▼                 ▼   │   │
                     │  │  ┌──────┐      ┌──────────┐│   │
@@ -39,16 +62,16 @@ This directory contains a **Helm chart** for deploying **TeamPass** — a collab
 
 | Component | Description |
 |-----------|-------------|
-| **Deployment** | TeamPass PHP application with configurable replicas |
-| **Service** | ClusterIP/NodePort/LoadBalancer for traffic routing |
-| **Ingress** | Optional ingress with TLS support |
+| **Deployment** | TeamPass PHP application with configurable replicas (2–10 with HPA) |
+| **Service** | ClusterIP for internal traffic routing |
+| **Ingress** | nginx ingress with TLS termination |
 | **MariaDB** | Bitnami MariaDB subchart (embedded or external DB) |
-| **PVCs** | Persistent storage for salt keys, files, and uploads |
+| **PVCs** | Persistent storage for salt keys (1Gi), files (10Gi), and uploads (10Gi) |
 | **ConfigMap** | Environment configuration for the application |
 | **Secrets** | Database credentials and admin password |
-| **HPA** | Horizontal Pod Autoscaler for scaling |
-| **PDB** | Pod Disruption Budget for high availability |
-| **NetworkPolicy** | Network isolation rules |
+| **HPA** | Horizontal Pod Autoscaler (2–10 replicas, 80% CPU/memory) |
+| **PDB** | Pod Disruption Budget (minAvailable: 1) |
+| **NetworkPolicy** | Optional network isolation rules |
 
 ### Chart Structure
 
@@ -157,10 +180,12 @@ echo "http://$SERVICE_IP"
 
 | Parameter | Description | Default |
 |-----------|-------------|---------|
-| `image.repository` | Docker image repository | `teampass/teampass` |
-| `image.tag` | Image tag (SHA256 recommended) | `sha256:6afa42c...` |
+| `image.repository` | Docker image repository (use `teampass-custom` for fixed permissions) | `teampass-custom` |
+| `image.tag` | Image tag (use SHA256 for production) | `3.1.6.7` |
 | `image.pullPolicy` | Image pull policy | `IfNotPresent` |
 | `imagePullSecrets` | Registry pull secrets | `[]` |
+
+**Note:** The custom image `teampass-custom` fixes PHP-FPM permissions by running as `nginx` user instead of `www-data`. See `docker/README.md` for build instructions.
 
 ### Service Configuration
 
@@ -171,14 +196,24 @@ echo "http://$SERVICE_IP"
 | `service.targetPort` | Container port | `80` |
 | `service.annotations` | Service annotations | `{}` |
 
+### Resources Configuration
+
+| Parameter | Description | Default |
+|-----------|-------------|---------|
+| `resources.requests.memory` | Memory request | `512Mi` |
+| `resources.requests.cpu` | CPU request | `250m` |
+| `resources.limits.memory` | Memory limit | `1Gi` |
+| `resources.limits.cpu` | CPU limit | `1000m` |
+
 ### Ingress Configuration
 
 | Parameter | Description | Default |
 |-----------|-------------|---------|
-| `ingress.enabled` | Enable ingress | `false` |
+| `ingress.enabled` | Enable ingress | `true` |
 | `ingress.className` | Ingress class | `nginx` |
-| `ingress.hosts` | Host routing rules | `[teampass.local]` |
-| `ingress.tls` | TLS configuration | `[]` |
+| `ingress.annotations` | Ingress annotations | `{proxy-body-size: "100m", proxy-read-timeout: "120"}` |
+| `ingress.hosts` | Host routing rules | `[teampass.example.com]` |
+| `ingress.tls` | TLS configuration | `[teampass-tls]` |
 
 ### Database Configuration
 
@@ -189,10 +224,14 @@ echo "http://$SERVICE_IP"
 | `mariadb.architecture` | `standalone` or `replication` | `standalone` |
 | `mariadb.auth.database` | Database name | `teampass` |
 | `mariadb.auth.username` | Database user | `teampass` |
-| `mariadb.primary.persistence.size` | DB storage size | `10Gi` |
+| `mariadb.primary.persistence.size` | DB storage size | `20Gi` |
+| `mariadb.primary.replicaCount` | Number of replicas | `1` |
+| `mariadb.primary.startupProbe.initialDelaySeconds` | Startup probe delay | `30` |
+| `mariadb.primary.livenessProbe.initialDelaySeconds` | Liveness probe delay | `120` |
+| `mariadb.primary.readinessProbe.initialDelaySeconds` | Readiness probe delay | `30` |
+| `mariadb.primary.resources.requests.memory` | Memory request | `512Mi` |
+| `mariadb.primary.resources.limits.memory` | Memory limit | `1Gi` |
 | `mariadb.primary.fips.openssl` | OpenSSL FIPS mode | `off` |
-| `mariadb.primary.livenessProbe.initialDelaySeconds` | Liveness probe delay | `600` |
-| `mariadb.primary.readinessProbe.initialDelaySeconds` | Readiness probe delay | `120` |
 
 **External Database:**
 | Parameter | Description | Default |
@@ -208,10 +247,10 @@ echo "http://$SERVICE_IP"
 
 | Parameter | Description | Default |
 |-----------|-------------|---------|
-| `teampass.installMode` | `manual` or `auto` | `manual` |
-| `teampass.adminEmail` | Admin email | `admin@teampass.local` |
-| `teampass.adminPassword` | Admin password | `""` (auto-generated) |
-| `teampass.url` | Application URL | `http://localhost` |
+| `teampass.installMode` | `manual` or `auto` | `auto` |
+| `teampass.adminEmail` | Admin email | `admin@example.com` |
+| `teampass.adminPassword` | Admin password | `ChangeMeToSecurePassword123!` |
+| `teampass.url` | Application URL | `https://teampass.box72.ru` |
 | `teampass.php.memoryLimit` | PHP memory limit | `512M` |
 | `teampass.php.uploadMaxFilesize` | Max upload size | `100M` |
 | `teampass.php.maxExecutionTime` | Max execution time | `120` |
@@ -224,17 +263,18 @@ echo "http://$SERVICE_IP"
 | `persistence.sk.enabled` | Enable salt keys storage | `true` |
 | `persistence.sk.size` | Salt keys storage size | `1Gi` |
 | `persistence.files.enabled` | Enable files storage | `true` |
-| `persistence.files.size` | Files storage size | `5Gi` |
+| `persistence.files.size` | Files storage size | `10Gi` |
 | `persistence.upload.enabled` | Enable upload storage | `true` |
-| `persistence.upload.size` | Upload storage size | `5Gi` |
+| `persistence.upload.size` | Upload storage size | `10Gi` |
+| `persistence.*.storageClass` | Storage class ("" = default) | `""` |
 
 ### Autoscaling
 
 | Parameter | Description | Default |
 |-----------|-------------|---------|
-| `autoscaling.enabled` | Enable HPA | `false` |
-| `autoscaling.minReplicas` | Minimum replicas | `1` |
-| `autoscaling.maxReplicas` | Maximum replicas | `5` |
+| `autoscaling.enabled` | Enable HPA | `true` |
+| `autoscaling.minReplicas` | Minimum replicas | `2` |
+| `autoscaling.maxReplicas` | Maximum replicas | `10` |
 | `autoscaling.targetCPUUtilizationPercentage` | CPU target | `80` |
 | `autoscaling.targetMemoryUtilizationPercentage` | Memory target | `80` |
 
@@ -247,15 +287,44 @@ echo "http://$SERVICE_IP"
 | `healthCheck.initialDelaySeconds` | Initial delay | `60` |
 | `healthCheck.periodSeconds` | Check interval | `30` |
 | `healthCheck.timeoutSeconds` | Timeout | `10` |
+| `healthCheck.failureThreshold` | Failure threshold | `3` |
+
+### Network Policy
+
+| Parameter | Description | Default |
+|-----------|-------------|---------|
+| `networkPolicy.enabled` | Enable network isolation | `false` |
+
+### Pod Disruption Budget
+
+| Parameter | Description | Default |
+|-----------|-------------|---------|
+| `pdb.enabled` | Enable PDB | `true` |
+| `pdb.minAvailable` | Minimum available pods | `1` |
 
 ## Development Conventions
 
 ### Values File Hierarchy
 
 1. **`values.yaml`** — Base defaults (development)
-2. **`values-example.yaml`** — Staging/example configuration
+2. **`values-example.yaml`** — Staging configuration with Ingress, TLS, HPA
 3. **`values-production.yaml`** — Production hardening
 4. **Custom values files** — Environment-specific overrides
+
+### Example Configuration (values-example.yaml)
+
+The `values-example.yaml` file provides a ready-to-use staging configuration:
+
+```yaml
+# Key features:
+# - Ingress with nginx and TLS
+# - Autoscaling (2-10 replicas)
+# - Resource limits (512Mi-1Gi memory, 250m-1000m CPU)
+# - MariaDB with custom probes and 20Gi storage
+# - Persistent storage: sk (1Gi), files (10Gi), upload (10Gi)
+# - Auto-installation mode with secure admin password
+# - PDB with minAvailable: 1
+```
 
 ### Security Best Practices
 
@@ -270,14 +339,16 @@ echo "http://$SERVICE_IP"
 ### Production Checklist
 
 - [ ] Change default passwords
-- [ ] Enable TLS/HTTPS
+- [ ] Enable TLS/HTTPS (configure Ingress with TLS)
 - [ ] Configure NetworkPolicy
-- [ ] Set resource limits
-- [ ] Enable autoscaling
-- [ ] Configure PDB
+- [ ] Set resource limits (requests: 512Mi/250m, limits: 1Gi/1000m)
+- [ ] Enable autoscaling (min: 2, max: 10)
+- [ ] Configure PDB (minAvailable: 1)
 - [ ] Enable security contexts
 - [ ] Set up monitoring/alerting
 - [ ] Configure backups for PVCs
+- [ ] Configure MariaDB probes (startup: 30s, liveness: 120s, readiness: 30s)
+- [ ] Increase storage for files/uploads (10Gi each)
 
 ### Template Helpers
 
@@ -314,9 +385,12 @@ The `_helpers.tpl` file provides reusable template functions:
 mariadb:
   primary:
     livenessProbe:
-      initialDelaySeconds: 600  # 10 minutes for first startup
-    readinessProbe:
       initialDelaySeconds: 120
+    readinessProbe:
+      initialDelaySeconds: 30
+    startupProbe:
+      initialDelaySeconds: 30
+      failureThreshold: 30
 ```
 
 ### MariaDB Crashes with Exit Code 137

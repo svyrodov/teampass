@@ -1,0 +1,176 @@
+# Copyright Broadcom, Inc. All Rights Reserved.
+# SPDX-License-Identifier: APACHE-2.0
+
+## values-test.yaml
+## Конфигурация для разворачивания одного инстанса MariaDB в Kubernetes
+## Сервис типа ClusterIP для подключения внутри кластера
+
+## @section Common parameters
+##
+
+## Имя для частичного переопределения fullname
+##
+nameOverride: ""
+
+## Полное переопределение имени
+##
+fullnameOverride: ""
+
+## @section MariaDB common parameters
+##
+
+## Образ MariaDB
+##
+image:
+  registry: registry-1.docker.io
+  repository: bitnami/mariadb
+  tag: latest
+  pullPolicy: IfNotPresent
+
+## Архитектура: standalone (один инстанс)
+##
+architecture: standalone
+
+## Параметры аутентификации
+##
+auth:
+  ## Пароль root пользователя (обязательно укажите свой)
+  ##
+  rootPassword: "test-root-password"
+
+  ## Имя базы данных
+  ##
+  database: teampass
+
+  ## Имя пользователя
+  ##
+  username: teampass
+
+  ## Пароль пользователя (обязательно укажите свой)
+  ##
+  password: "test-user-password"
+
+  ## Пользователь для репликации (не используется в standalone)
+  ##
+  replicationUser: ""
+  replicationPassword: ""
+
+  ## Монтировать учетные данные как файлы
+  ##
+  usePasswordFiles: false
+
+## @section MariaDB Primary parameters
+##
+
+primary:
+  ## Количество реплик: 1
+  ##
+  replicaCount: 1
+
+  ## Конфигурация MariaDB
+  ##
+  configuration: |-
+    [mysqld]
+    skip-name-resolve
+    explicit_defaults_for_timestamp
+    basedir=/opt/bitnami/mariadb
+    datadir=/bitnami/mariadb/data
+    plugin_dir=/opt/bitnami/mariadb/plugin
+    port=3306
+    socket=/opt/bitnami/mariadb/tmp/mysql.sock
+    tmpdir=/opt/bitnami/mariadb/tmp
+    max_allowed_packet=16M
+    bind-address=*
+    pid-file=/opt/bitnami/mariadb/tmp/mysqld.pid
+    log-error=/opt/bitnami/mariadb/logs/mysqld.log
+    character-set-server=UTF8
+    collation-server=utf8_general_ci
+    slow_query_log=0
+    long_query_time=10.0
+
+    [client]
+    port=3306
+    socket=/opt/bitnami/mariadb/tmp/mysql.sock
+    default-character-set=UTF8
+    plugin_dir=/opt/bitnami/mariadb/plugin
+
+  ## Ресурсы (для тестирования)
+  ##
+  resourcesPreset: "micro"
+
+  ## Probe настройки
+  ##
+  startupProbe:
+    enabled: true
+    initialDelaySeconds: 30
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 30
+    successThreshold: 1
+
+  livenessProbe:
+    enabled: true
+    initialDelaySeconds: 120
+    periodSeconds: 10
+    timeoutSeconds: 1
+    failureThreshold: 3
+    successThreshold: 1
+
+  readinessProbe:
+    enabled: true
+    initialDelaySeconds: 30
+    periodSeconds: 10
+    timeoutSeconds: 1
+    failureThreshold: 3
+    successThreshold: 1
+
+  ## Постоянное хранилище
+  ##
+  persistence:
+    enabled: true
+    size: 8Gi
+    storageClass: ""
+    accessModes:
+      - ReadWriteOnce
+
+  ## Сервис
+  ##
+  service:
+    ## Тип сервиса: ClusterIP (доступ только внутри кластера)
+    ##
+    type: ClusterIP
+    ports:
+      mysql: 3306
+      metrics: 9104
+    clusterIP: ""
+
+  ## Pod Disruption Budget
+  ##
+  pdb:
+    create: false
+
+## @section Network Policy parameters
+##
+
+## Сетевая политика (опционально)
+##
+networkPolicy:
+  enabled: false
+
+## @section RBAC parameters
+##
+
+## ServiceAccount
+##
+serviceAccount:
+  create: true
+  name: ""
+  automountServiceAccountToken: false
+
+## @section Metrics parameters
+##
+
+## Metrics (экспорт метрик Prometheus)
+##
+metrics:
+  enabled: false

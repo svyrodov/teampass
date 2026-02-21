@@ -5,8 +5,34 @@ Helm chart для развёртывания **TeamPass** — менеджера
 ## Обзор
 
 Этот Helm chart развёртывает:
-- **TeamPass Application** — PHP-приложение для управления паролями
+- **TeamPass Application** — PHP-приложение для управления паролями с поддержкой масштабирования (2–10 реплик)
 - **MariaDB** — база данных (встроенная или внешняя)
+- **Ingress** — nginx ingress с TLS termination
+- **HPA** — автоматическое масштабирование по CPU/памяти
+- **PVC** — постоянное хранилище для salt keys, файлов и загрузок
+
+### Кастомный Docker-образ
+
+**Важно:** Этот chart использует **кастомный Docker-образ** (`teampass-custom`), который исправляет критическую проблему прав доступа в официальном образе TeamPass:
+
+| Компонент | Официальный образ | Кастомный образ |
+|-----------|-------------------|-----------------|
+| PHP-FPM пользователь | `www-data` | `nginx` ✅ |
+| PHP-FPM группа | `www-data` | `nginx` ✅ |
+| Nginx worker | `nginx` | `nginx` |
+| Владелец файлов | `nginx` | `nginx` |
+
+Кастомный образ обеспечивает работу PHP-FPM и Nginx под одним пользователем (`nginx`), предотвращая ошибки "path not writable".
+
+**Сборка кастомного образа:**
+```bash
+cd docker
+./build.sh
+# Или вручную:
+docker build -t teampass-custom:3.1.6.7 -f Dockerfile .
+```
+
+См. `docker/README.md` для подробностей.
 
 ## Требования
 
@@ -68,12 +94,20 @@ helm install teampass ./teampass \
 
 | Параметр | Описание | Значение по умолчанию |
 |----------|----------|----------------------|
-| `image.repository` | Репозиторий образа TeamPass | `teampass/teampass` |
+| `image.repository` | Репозиторий образа TeamPass | `teampass-custom` |
 | `image.tag` | Тег образа | `3.1.5.2` |
 | `service.type` | Тип сервиса | `ClusterIP` |
-| `ingress.enabled` | Включить Ingress | `false` |
+| `ingress.enabled` | Включить Ingress | `true` |
+| `ingress.className` | Ingress класс | `nginx` |
 | `mariadb.enabled` | Включить встроенную MariaDB | `true` |
-| `teampass.installMode` | Режим установки (manual/auto) | `manual` |
+| `teampass.installMode` | Режим установки (manual/auto) | `auto` |
+| `autoscaling.enabled` | Включить HPA | `true` |
+| `autoscaling.minReplicas` | Минимум реплик | `2` |
+| `autoscaling.maxReplicas` | Максимум реплик | `10` |
+| `resources.requests.memory` | Запрос памяти | `512Mi` |
+| `resources.limits.memory` | Лимит памяти | `1Gi` |
+
+**Примечание:** Кастомный образ `teampass-custom` исправляет права доступа PHP-FPM, запуская его от пользователя `nginx` вместо `www-data`. См. `docker/README.md`.
 
 ### Параметры базы данных
 
@@ -88,8 +122,25 @@ mariadb:
     password: ""  # Авто-генерация
     rootPassword: ""  # Авто-генерация
   primary:
+    replicaCount: 1
     persistence:
-      size: 10Gi
+      size: 20Gi
+    resources:
+      requests:
+        memory: "512Mi"
+        cpu: "250m"
+      limits:
+        memory: "1Gi"
+        cpu: "1000m"
+    startupProbe:
+      enabled: true
+      initialDelaySeconds: 30
+    livenessProbe:
+      enabled: true
+      initialDelaySeconds: 120
+    readinessProbe:
+      enabled: true
+      initialDelaySeconds: 30
 ```
 
 **Внешняя база данных:**
@@ -122,6 +173,29 @@ teampass:
   dbPrefix: teampass_
 ```
 
+### Autoscaling
+
+```yaml
+autoscaling:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 80
+  targetMemoryUtilizationPercentage: 80
+```
+
+### Resources
+
+```yaml
+resources:
+  requests:
+    memory: "512Mi"
+    cpu: "250m"
+  limits:
+    memory: "1Gi"
+    cpu: "1000m"
+```
+
 ### Persistent Storage
 
 ```yaml
@@ -133,11 +207,51 @@ persistence:
   files:
     enabled: true
     storageClass: ""
-    size: 5Gi
+    size: 10Gi
   upload:
     enabled: true
     storageClass: ""
-    size: 5Gi
+    size: 10Gi
+```
+
+### Ingress
+
+```yaml
+ingress:
+  enabled: true
+  className: nginx
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-body-size: "100m"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "120"
+  hosts:
+    - host: teampass.example.com
+      paths:
+        - path: /
+          pathType: Prefix
+  tls:
+    - secretName: teampass-tls
+      hosts:
+        - teampass.example.com
+```
+
+### Pod Disruption Budget
+
+```yaml
+pdb:
+  enabled: true
+  minAvailable: 1
+```
+
+### Health Checks
+
+```yaml
+healthCheck:
+  enabled: true
+  path: /health
+  initialDelaySeconds: 60
+  periodSeconds: 30
+  timeoutSeconds: 10
+  failureThreshold: 3
 ```
 
 ## Проверка установки
@@ -226,12 +340,14 @@ echo "http://$SERVICE_IP"
 
 ### Рекомендации для продакшена
 
-1. **Измените пароли по умолчанию** в `values.yaml`
-2. **Включите HTTPS/TLS** через Ingress
+1. **Измените пароли по умолчанию** в `values.yaml` или используйте внешние Secrets
+2. **Включите HTTPS/TLS** через Ingress (включено по умолчанию в `values-example.yaml`)
 3. **Используйте Secrets** для чувствительных данных
 4. **Включите NetworkPolicy** для ограничения трафика
 5. **Настройте PodSecurityContext** для ограничения прав
 6. **Регулярно делайте бэкапы** PVC
+7. **Настройте мониторинг** за состоянием подов и базы данных
+8. **Используйте SHA256 теги** образов для воспроизводимости развёртываний
 
 ### Пример безопасной конфигурации
 
@@ -244,12 +360,20 @@ securityContext:
   runAsNonRoot: true
   runAsUser: 1000
 
-networkPolicy:
-  enabled: true
-
 podSecurityContext:
   fsGroup: 1000
   runAsNonRoot: true
+
+networkPolicy:
+  enabled: true
+
+resources:
+  requests:
+    memory: "512Mi"
+    cpu: "250m"
+  limits:
+    memory: "1Gi"
+    cpu: "1000m"
 ```
 
 ## Мониторинг и диагностика
@@ -278,22 +402,43 @@ kubectl describe pod -n teampass -l app.kubernetes.io/name=teampass
 
 ## Multi-Environment Configuration
 
-### Development
+### Development (разработка)
+
+Минимальная конфигурация для локальной разработки:
 
 ```bash
-helm install teampass ./teampass -f values.yaml
+helm install teampass ./teampass -n teampass --create-namespace
 ```
 
-### Staging
+### Staging (тестирование)
+
+Конфигурация с Ingress, TLS и автоскейлингом:
 
 ```bash
-helm install teampass ./teampass -f values-example.yaml
+helm install teampass ./teampass \
+  -f values-example.yaml \
+  -n teampass \
+  --create-namespace
 ```
 
-### Production
+**Особенности конфигурации:**
+- Ingress с nginx и TLS
+- Autoscaling (2–10 реплик)
+- Resource limits (512Mi–1Gi память, 250m–1000m CPU)
+- MariaDB с кастомными probe'ами и 20Gi хранилищем
+- PVC: sk (1Gi), files (10Gi), upload (10Gi)
+- Auto-installation режим
+- PDB с minAvailable: 1
+
+### Production (продакшен)
+
+Полностью настроенная конфигурация для продакшена:
 
 ```bash
-helm install teampass ./teampass -f values-production.yaml
+helm install teampass ./teampass \
+  -f values-production.yaml \
+  -n teampass \
+  --create-namespace
 ```
 
 ## Структура chart
@@ -327,11 +472,53 @@ teampass/
 ### Pod не запускается
 
 ```bash
+# Проверка статуса подов
+kubectl get pods -n teampass
+
 # Проверка логов
 kubectl logs -n teampass teampass-xxxxx
 
 # Проверка событий
 kubectl describe pod -n teampass teampass-xxxxx
+```
+
+### MariaDB не запускается
+
+**Проблема:** Liveness probe fails с "Access denied"
+
+**Решение:** Увеличьте `initialDelaySeconds` для liveness probe:
+
+```yaml
+mariadb:
+  primary:
+    livenessProbe:
+      initialDelaySeconds: 120
+    readinessProbe:
+      initialDelaySeconds: 30
+    startupProbe:
+      initialDelaySeconds: 30
+      failureThreshold: 30
+```
+
+**Проблема:** Exit code 137 (OOM или сигнал)
+
+**Решение:** Отключите FIPS mode для OpenSSL:
+
+```yaml
+mariadb:
+  primary:
+    fips:
+      openssl: "off"
+```
+
+### Init container ждёт базу данных
+
+```bash
+# Проверка логов MariaDB
+kubectl logs -n teampass teampass-mariadb-0
+
+# Проверка доступности БД
+kubectl exec -n teampass teampass-mariadb-0 -- mysqladmin ping -u root
 ```
 
 ### Ошибки подключения к базе данных
@@ -352,7 +539,66 @@ kubectl get pvc -n teampass
 
 # Описание PVC
 kubectl describe pvc -n teampass teampass-sk
+
+# Проверка storage class
+kubectl get storageclass
 ```
+
+### HPA не масштабирует
+
+```bash
+# Проверка HPA
+kubectl get hpa -n teampass
+
+# Проверка метрик
+kubectl top pods -n teampass
+```
+
+## Кастомный Docker-образ
+
+### Почему кастомный образ?
+
+В официальном образе `teampass/teampass`:
+- **Nginx** работает от `nginx`
+- **PHP-FPM** работает от `www-data`
+- **Файлы** принадлежат `nginx:nginx`
+
+Это вызывает ошибки прав доступа — PHP-FPM не может писать в каталоги `sk/`, `files/`, `upload/`.
+
+### Решение
+
+Кастомный образ изменяет пользователя PHP-FPM на `nginx`:
+
+```dockerfile
+FROM teampass/teampass:3.1.6.7
+
+RUN sed -i 's/^user = .*/user = nginx/' /usr/local/etc/php-fpm.d/www.conf && \
+    sed -i 's/^group = .*/group = nginx/' /usr/local/etc/php-fpm.d/www.conf
+```
+
+### Сборка образа
+
+```bash
+cd docker
+./build.sh
+
+# Или вручную:
+docker build -t teampass-custom:3.1.6.7 -f Dockerfile .
+```
+
+### Проверка
+
+```bash
+# Проверка пользователя PHP-FPM
+docker run --rm teampass-custom:3.1.6.7 \
+  grep -E "^user =|^group =" /usr/local/etc/php-fpm.d/www.conf
+
+# Ожидаемый вывод:
+# user = nginx
+# group = nginx
+```
+
+См. `docker/README.md` для подробностей.
 
 ## Лицензия
 

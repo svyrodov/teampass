@@ -11,9 +11,12 @@ replicaCount: 3
 # ----------------------------------------
 # Image Configuration
 # ----------------------------------------
+# Кастомный образ с исправленным PHP-FPM user (nginx вместо www-data)
+# Для production рекомендуется использовать SHA256 тег для воспроизводимости
 image:
-  repository: teampass/teampass
-  tag: "sha256:6afa42c4071b2400f2d4995654776ff42dbccea96c2b87ebfcf4d29c7e672edf"
+  repository: teampass-custom
+  tag: "3.1.6.7"
+  # tag: "sha256:<commit-hash>"  # Для production укажите SHA256 тег
   pullPolicy: IfNotPresent
 
 imagePullSecrets:
