@@ -22,7 +22,11 @@ The custom image ensures PHP-FPM and Nginx run under the same user (`nginx`), pr
 cd teampass/docker
 ./build.sh
 # Or manually:
-docker build -t teampass-custom:3.1.6.7 -f Dockerfile .
+docker build -t teampass-custom:3.1.6.7-alpine3.21 -f Dockerfile .
+
+# Push to GitHub Container Registry:
+docker tag teampass-custom:3.1.6.7-alpine3.21 ghcr.io/your-username/teampass-custom:3.1.6.7-alpine3.21
+docker push ghcr.io/your-username/teampass-custom:3.1.6.7-alpine3.21
 ```
 
 See `docker/README.md` for details.

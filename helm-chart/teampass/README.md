@@ -29,7 +29,11 @@ Helm chart для развёртывания **TeamPass** — менеджера
 cd docker
 ./build.sh
 # Или вручную:
-docker build -t teampass-custom:3.1.6.7 -f Dockerfile .
+docker build -t teampass-custom:latest-alpine3.21 -f Dockerfile .
+
+# Загрузка в GitHub Container Registry:
+docker tag teampass-custom:latest-alpine3.21 ghcr.io/your-username/teampass-custom:latest-alpine3.21
+docker push ghcr.io/your-username/teampass-custom:latest-alpine3.21
 ```
 
 См. `docker/README.md` для подробностей.
@@ -567,11 +571,16 @@ kubectl top pods -n teampass
 
 ### Решение
 
-Кастомный образ изменяет пользователя PHP-FPM на `nginx`:
+Используем кастомный образ на базе `php:8.3-fpm-alpine3.21` (свежий, без уязвимостей):
 
 ```dockerfile
-FROM teampass/teampass:3.1.6.7
+FROM php:8.3-fpm-alpine3.21
 
+# Копирование файлов из официального образа TeamPass
+COPY --from=teampass/teampass:latest /etc/nginx/nginx.conf /etc/nginx/nginx.conf
+COPY --from=teampass/teampass:latest /var/www/html /var/www/html
+
+# Исправление пользователя PHP-FPM
 RUN sed -i 's/^user = .*/user = nginx/' /usr/local/etc/php-fpm.d/www.conf && \
     sed -i 's/^group = .*/group = nginx/' /usr/local/etc/php-fpm.d/www.conf
 ```
@@ -583,19 +592,29 @@ cd docker
 ./build.sh
 
 # Или вручную:
-docker build -t teampass-custom:3.1.6.7 -f Dockerfile .
+docker build -t teampass-custom:latest-alpine3.21 -f Dockerfile .
+
+# Загрузка в GitHub Container Registry:
+docker tag teampass-custom:latest-alpine3.21 ghcr.io/your-username/teampass-custom:latest-alpine3.21
+docker push ghcr.io/your-username/teampass-custom:latest-alpine3.21
 ```
 
 ### Проверка
 
 ```bash
 # Проверка пользователя PHP-FPM
-docker run --rm teampass-custom:3.1.6.7 \
+docker run --rm teampass-custom:latest-alpine3.21 \
   grep -E "^user =|^group =" /usr/local/etc/php-fpm.d/www.conf
 
 # Ожидаемый вывод:
 # user = nginx
 # group = nginx
+
+# Проверка версии Alpine
+docker run --rm teampass-custom:latest-alpine3.21 cat /etc/alpine-release
+
+# Сканирование на уязвимости (требуется trivy)
+trivy image teampass-custom:latest-alpine3.21
 ```
 
 См. `docker/README.md` для подробностей.

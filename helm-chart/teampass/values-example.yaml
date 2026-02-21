@@ -8,9 +8,10 @@
 # Image Configuration
 # ----------------------------------------
 # Кастомный образ с исправленным PHP-FPM user (nginx вместо www-data)
+# Базовый образ: php:8.3-fpm-alpine3.21 (минимум уязвимостей)
 image:
-  repository: teampass-custom
-  tag: "3.1.6.7"
+  repository: ghcr.io/your-username/teampass-custom
+  tag: "latest-alpine3.21"
   pullPolicy: IfNotPresent
 
 # -----------------------------6-----------
